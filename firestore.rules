@@ -1,0 +1,42 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Todos podem ver SE um presente já foi escolhido (mas não por quem).
+    match /reservas/{giftId} {
+      allow read: if true;
+
+      // Cada item só pode ser criado uma vez e só junto com o nome do convidado.
+      allow create: if giftId.matches('p(0[1-9]|[12][0-9]|30)')
+        && request.resource.data.keys().hasOnly(['criadoEm'])
+        && request.resource.data.criadoEm == request.time
+        && existsAfter(/databases/$(database)/documents/nomes/$(giftId));
+
+      // Convidados não podem modificar nem apagar reservas.
+      allow update, delete: if false;
+    }
+
+    // Nomes: convidados só escrevem. Ninguém lê pelo site; os noivos veem no console.
+    match /nomes/{giftId} {
+      allow read: if false;
+
+      allow create, update: if giftId.matches('p(0[1-9]|[12][0-9]|30)')
+        && request.resource.data.keys().hasOnly(['nome','presente','criadoEm'])
+        && request.resource.data.keys().hasAll(['nome','presente','criadoEm'])
+        && request.resource.data.nome is string
+        && request.resource.data.nome.size() >= 2
+        && request.resource.data.nome.size() <= 60
+        && request.resource.data.presente is string
+        && request.resource.data.presente.size() <= 80
+        && request.resource.data.criadoEm == request.time
+        && !exists(/databases/$(database)/documents/reservas/$(giftId))
+        && existsAfter(/databases/$(database)/documents/reservas/$(giftId));
+
+      allow delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
